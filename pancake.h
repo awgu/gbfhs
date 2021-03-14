@@ -11,41 +11,31 @@
 
 #include <vector>
 #include <unordered_set>
+#include <unordered_map>
 #include <memory>
 #include <iostream>
-
-/** @brief x value for GAP-x heuristic */
-// #define GAP_X (10)
 
 /**
  * @brief Forward or backward direction.
  */
-enum Direction {
-    F, B
-};
+enum Direction { F, B };
 
 /**
  * @brief Node used in the search algorithm.
+ * 
+ * A node corresponds to either the forward or backward direction.
  */
 struct Node {
     /** @brief state representing a pancake stack */
     std::vector<int> s;
-    /** @brief cost of path from initial state; 0 if unused */
-    int g_F;
-    /** @brief cost of path from goal state; 0 if unused */
-    int g_B;
-    /** @brief heuristic cost to goal state */
-    int h_F;
-    /** @brief heuristic cost to initial state */
-    int h_B;
     /** @brief direction that the node is visited from */
     Direction dir;
 
     /**
      * @brief Constructor.
      */
-    Node(const std::vector<int> &s, int g_F, int g_B, int h_F, int h_B, Direction dir)
-        : s(s), g_F(g_F), g_B(g_B), h_F(h_F), h_B(h_B), dir(dir)
+    Node(const std::vector<int> &s, Direction dir)
+        : s(s), dir(dir)
     {}
 };
 
@@ -88,6 +78,7 @@ struct NodeEqual {
 
 /* typedef for convenience */
 typedef std::unordered_set<Node,NodeHash,NodeEqual> NodeSet;
+typedef std::unordered_map<Node,int,NodeHash,NodeEqual> NodeIntMap;
 typedef std::vector<Node> NodeVector;
 
 /* exported function prototypes */

@@ -24,26 +24,18 @@ std::mt19937 gen(rd());
  * 
  * @param node Node to check.
  * @param dir Direction to check.
+ * @param gap_x x for the GAP-x heuristic.
  * @param fLim Lower bound on the optimal solution cost.
  * @param gLim_D Upper bound on the g-value of nodes to explore in direction D.
+ * @param g_D Map from nodes to costs.
  * @return True if the node is expandable; false otherwise.
  */
-bool is_expandable(const Node &node, Direction dir, int fLim, int gLim_D) {
+bool is_expandable(const Node &node, Direction dir, int gap_x, int fLim, int gLim_D, const NodeIntMap &g_D) {
     assert(dir == Direction::F || dir == Direction::B);
-    int f_D = 0;
-    int g_D = 0;
-    if (dir == Direction::F) {
-        assert(node.g_F >= 0 && node.h_F >= 0);
-        g_D = node.g_F;
-        f_D = node.g_F + node.h_F;
-    } else if (dir == Direction::B) {
-        assert(node.g_B >= 0 && node.h_B >= 0);
-        g_D = node.g_B;
-        f_D = node.g_B + node.h_B;
-    } else {
-        throw std::runtime_error("invalid direction");
-    }
-    return f_D <= fLim && g_D < gLim_D;
+    int g_D_ = g_D.find(node)->second;
+    int h_D = h(node.s, dir, gap_x);
+    int f_D = g_D_ + h_D;
+    return f_D <= fLim && g_D_ < gLim_D;
 }
 
 /**
@@ -65,15 +57,26 @@ bool is_expandable(const Node &node, Direction dir, int fLim, int gLim_D) {
 void split(int gLSum, int &gLim_F, int &gLim_B) {
     int old_gLim_F = gLim_F;
     int old_gLim_B = gLim_B;
+
     /* divide excess among gLim_F and gLim_B */
     int excess = gLSum - gLim_F - gLim_B;
-    int ratio = 2;
-    int gLim_F_delta = excess / ratio;
-    gLim_F += gLim_F_delta;
-    gLim_B += excess - gLim_F_delta;
-    assert(gLim_B + gLim_F == gLSum);
+    if (excess == 1) { // after first iter, excess should always == 1
+        if (gLim_F < gLim_B) {
+            gLim_F++;
+        } else {
+            gLim_B++;
+        }
+    } else {
+        int ratio = 2;
+        int gLim_F_delta = excess / ratio;
+        gLim_F += gLim_F_delta;
+        gLim_B += excess - gLim_F_delta;
+    }
+
+    /* check split constraints */
     assert(gLim_F >= old_gLim_F);
     assert(gLim_B >= old_gLim_B);
+    assert(gLim_B + gLim_F == gLSum);
 }
 
 /**
@@ -112,129 +115,78 @@ Node pick(const NodeSet &expandable_F, const NodeSet &expandable_B) {
  * @param open_B Backward open set.
  * @param closed_F Forward closed set.
  * @param closed_B Backward closed set.
+ * @param g_F Map from nodes to forward costs.
+ * @param g_B Map from nodes to backward costs.
  * @return Void.
  */
 void expand_level(int gLim_F, int gLim_B, int fLim, int &best, int gap_x, int &nodes_expanded,
-    NodeSet &open_F, NodeSet &open_B, NodeSet &closed_F, NodeSet &closed_B) {
-    NodeSet expandable_F;
-    NodeSet expandable_B;
+    NodeSet &open_F, NodeSet &open_B, NodeSet &closed_F, NodeSet &closed_B, NodeIntMap &g_F, NodeIntMap &g_B) {
+    /* construct expandable sets */
+    NodeSet expandable_F;  // subset of open_F
+    NodeSet expandable_B;  // subset of open_B
     for (const Node &node : open_F) {
-        if (is_expandable(node, Direction::F, fLim, gLim_F)) {
+        if (is_expandable(node, Direction::F, gap_x, fLim, gLim_F, g_F)) {
             expandable_F.emplace(node);
         }
     }
     for (const Node &node : open_B) {
-        if (is_expandable(node, Direction::B, fLim, gLim_B)) {
+        if (is_expandable(node, Direction::B, gap_x, fLim, gLim_B, g_B)) {
             expandable_B.emplace(node);
         }
     }
+
+    /* main loop */
     while (!expandable_F.empty() || !expandable_B.empty()) {
         Node node = pick(expandable_F, expandable_B);
         Direction dir = node.dir;
-        assert(dir == Direction::F || dir == Direction::B);
-        if (dir == Direction::F) {
-            assert(node.g_F >= 0 && node.g_F < INT_MAX);
-            assert(expandable_F.count(node) > 0 && open_F.count(node) > 0);
-            expandable_F.erase(node);
-            open_F.erase(node);
-            assert(closed_F.count(node) == 0);
-            closed_F.insert(node);
-            NodeVector successors = expand(node, gap_x, nodes_expanded);
-            for (Node &s_node : successors) {
-                /* get the successor node's old g_F value if it exists */
-                assert(!(open_F.count(s_node) > 0 && closed_F.count(s_node) > 0));
-                int old_s_node_g_F = INT_MAX;
-                if (open_F.count(s_node) > 0) {
-                    old_s_node_g_F = (*open_F.find(s_node)).g_F;
-                } else if (closed_F.count(s_node) > 0) {
-                    old_s_node_g_F = (*closed_F.find(s_node)).g_F;
-                }
+        
+        /* generalize to D == F or D == B */
+        NodeSet &open_D = (dir == Direction::F) ? open_F : open_B;
+        NodeSet &open_D_opp = (dir == Direction::F) ? open_B : open_F;
+        NodeSet &closed_D = (dir == Direction::F) ? closed_F : closed_B;
+        NodeSet &expandable_D = (dir == Direction::F) ? expandable_F : expandable_B;
+        NodeIntMap &g_D = (dir == Direction::F) ? g_F : g_B;
+        NodeIntMap &g_D_opp = (dir == Direction::F) ? g_B : g_F;
+        int gLim_D = (dir == Direction::F) ? gLim_F : gLim_B;
 
-                /* continue if node visits s_node via a suboptimal path */
-                // if (... && g_F(node) + cost(node, s_node) >= g_F(s_node))
-                if ((open_F.count(s_node) > 0 || closed_F.count(s_node) > 0) &&
-                    (node.g_F + 1 >= old_s_node_g_F)) {  // assumes unit cost
+        /* mark node as closed */
+        assert(closed_D.count(node) == 0);
+        expandable_D.erase(node);
+        open_D.erase(node);
+        closed_D.insert(node);
+
+        /* iterate over successor nodes */
+        NodeVector successors = expand(node, gap_x, nodes_expanded);
+        for (Node &s_node : successors) {
+            /* continue if node visits s_node via a suboptimal path */
+            bool already_seen = open_D.count(s_node) > 0 || closed_D.count(s_node) > 0;
+            if (already_seen) {
+                assert(g_D.count(node) > 0 && g_D.count(s_node) > 0);
+                bool suboptimal_cost = g_D[node] + 1 >= g_D[s_node];  // assumes unit cost
+                if (suboptimal_cost) {
                     continue;
-                }
-
-                /* node visits s_node via a better path */
-                // if (s_node in open_F U closed_F)
-                if (open_F.count(s_node) > 0 || closed_F.count(s_node) > 0) {
-                    open_F.erase(s_node);
-                    closed_F.erase(s_node);
-                }
-                // g_F(s_node) <- g_F(node) + cost(node, s_node)
-                s_node.g_F = node.g_F + 1;
-                assert(open_F.count(s_node) == 0);
-                open_F.insert(s_node);
-                if (is_expandable(s_node, Direction::F, fLim, gLim_F)) {
-                    if (expandable_F.count(s_node) > 0 && (*expandable_F.find(s_node)).g_F > s_node.g_F) {
-                        expandable_F.erase(s_node);
-                    }
-                    expandable_F.insert(s_node);
-                }
-
-                /* collision */
-                if (open_B.count(s_node) > 0) {
-                    assert(s_node.g_B == -1);
-                    s_node.g_B = (*open_B.find(s_node)).g_B;
-                    best = std::min(best, s_node.g_F + s_node.g_B);
-                    if (best <= fLim) {
-                        return;
-                    }
                 }
             }
-        } 
-        else if (dir == Direction::B) {  // symmetric
-            assert(node.g_B >= 0 && node.g_B < INT_MAX);
-            assert(expandable_B.count(node) > 0 && open_B.count(node) > 0);
-            expandable_B.erase(node);
-            open_B.erase(node);
-            assert(closed_B.count(node) == 0);
-            closed_B.insert(node);
-            NodeVector successors = expand(node, gap_x, nodes_expanded);
-            for (Node &s_node : successors) {
-                /* get the successor node's old g_B value if it exists */
-                assert(!(open_B.count(s_node) > 0 && closed_B.count(s_node) > 0));
-                int old_s_node_g_B = INT_MAX;
-                if (open_B.count(s_node) > 0) {
-                    old_s_node_g_B = (*open_B.find(s_node)).g_B;
-                } else if (closed_B.count(s_node) > 0) {
-                    old_s_node_g_B = (*closed_B.find(s_node)).g_B;
-                }
 
-                /* continue if node visits s_node via a suboptimal path */
-                // if (... && g_B(node) + cost(node, s_node) >= g_B(s_node))
-                if ((open_B.count(s_node) > 0 || closed_B.count(s_node) > 0) &&
-                    (node.g_B + 1 >= old_s_node_g_B)) {  // assumes unit cost
-                    continue;
-                }
+            /* node visits s_node via a cheaper path */
+            open_D.erase(s_node);
+            closed_D.erase(s_node);
 
-                /* node visits s_node via a better path */
-                // if (s_node in open_B U closed_B)
-                if (open_B.count(s_node) > 0 || closed_B.count(s_node) > 0) {
-                    open_B.erase(s_node);
-                    closed_B.erase(s_node);
-                }
-                // g_B(s_node) <- g_B(node) + cost(node, s_node)
-                s_node.g_B = node.g_B + 1;
-                assert(open_B.count(s_node) == 0);
-                open_B.insert(s_node);
-                if (is_expandable(s_node, Direction::B, fLim, gLim_B)) {
-                    if (expandable_B.count(s_node) > 0 && (*expandable_B.find(s_node)).g_B > s_node.g_B) {
-                        expandable_B.erase(s_node);
-                    }
-                    expandable_B.insert(s_node);
-                }
+            if (g_D.count(s_node) > 0) {
+                assert(g_D[s_node] > g_D[node] + 1);
+            }
+            g_D[s_node] = g_D[node] + 1;  // assumes unit cost
+            open_D.insert(s_node);
+            if (is_expandable(s_node, dir, gap_x, fLim, gLim_D, g_D)) {
+                expandable_D.insert(s_node);
+            }
 
-                /* collision */
-                if (open_F.count(s_node) > 0) {
-                    assert(s_node.g_F == -1);
-                    s_node.g_F = (*open_F.find(s_node)).g_F;
-                    best = std::min(best, s_node.g_B + s_node.g_F);
-                    if (best <= fLim) {
-                        return;
-                    }
+            /* check for collision */
+            if (open_D_opp.count(s_node) > 0) {
+                assert(g_D.count(s_node) > 0 && g_D_opp.count(s_node) > 0);
+                best = std::min(best, g_D[s_node] + g_D_opp[s_node]);
+                if (best <= fLim) {
+                    return;
                 }
             }
         }
@@ -257,27 +209,35 @@ int gbfhs(const std::vector<int> &initial_state, const std::vector<int> &goal_st
         return 0;
     }
     int best = INT_MAX;  // unsolvable
-    NodeSet open_F;
-    NodeSet open_B;
-    NodeSet closed_F;
-    NodeSet closed_B;
-    open_F.emplace(initial_state, 0, INT_MAX, h(initial_state, Direction::F, gap_x), -1, Direction::F);
-    open_B.emplace(goal_state, INT_MAX, 0, -1, 0, Direction::B);
     nodes_expanded = 0;
+
+    /* initialize node sets */
+    NodeSet open_F, open_B, closed_F, closed_B;
+    open_F.emplace(initial_state, Direction::F);
+    open_B.emplace(goal_state, Direction::B);
+
+    /* initialize cost data structures */
+    NodeIntMap g_F, g_B;
+    g_F.emplace(std::make_pair(Node { initial_state, Direction::F }, 0));
+    g_B.emplace(std::make_pair(Node { goal_state, Direction::B }, 0));    
+
+    /* initialize limits */
     int fLim = std::max(std::max(h(initial_state, Direction::F, gap_x), h(goal_state, Direction::B, gap_x)), eps);
     int gLim_F = 0;
     int gLim_B = 0;
+
+    /* main loop */
     while (!open_F.empty() && !open_B.empty()) {
         if (best == fLim) {
             return best;
         }
         int gLSum = fLim - eps + 1;
         split(gLSum, gLim_F, gLim_B);
-        expand_level(gLim_F, gLim_B, fLim, best, gap_x, nodes_expanded, open_F, open_B, closed_F, closed_B);
+        expand_level(gLim_F, gLim_B, fLim, best, gap_x, nodes_expanded, open_F, open_B, closed_F, closed_B, g_F, g_B);
         if (best == fLim) {
             return best;
         }
-        std::cout << "nodes expanded: " << nodes_expanded << std::endl;
+        // std::cout << "nodes expanded: " << nodes_expanded << std::endl;
         fLim++;
     }
     return best;

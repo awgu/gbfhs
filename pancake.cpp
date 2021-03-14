@@ -17,7 +17,6 @@
  * The output format looks like:
  * Node:
  * s: ...
- * g_F: ... g_B: ... h_F: ... h_B: ...
  * dir: ...
  * 
  * @param node Node to print.
@@ -28,7 +27,6 @@ void print_node(const Node &node) {
     for (int i : node.s) {
         std::cout << i << " ";
     }
-    std::cout << "\ng_F: " << node.g_F << " g_B: " << node.g_B << " h_F: " << node.h_F << " h_B: " << node.h_B;
     if (node.dir == Direction::F) {
         std::cout << "\ndir: F" << std::endl;
     } else if (node.dir == Direction::B) {
@@ -102,7 +100,11 @@ std::vector<int> flip(const std::vector<int> &s, int k) {
  * @param gap_x x for the GAP-x heuristic.
  * @return Heuristic value.
  */
-int h(const std::vector<int> &s, __attribute__((unused)) Direction dir, int gap_x) {
+int h(const std::vector<int> &s, Direction dir, int gap_x) {
+    /* blind heuristic for backward direction */
+    if (dir == Direction::B) {
+        return 0;
+    }
     int n = s.size() - 1;
     /* GAP-x heuristic */
     int gap = 0;
@@ -119,7 +121,7 @@ int h(const std::vector<int> &s, __attribute__((unused)) Direction dir, int gap_
  * 
  * @param node Node representing a state.
  * @param gap_x x for the GAP-x heuristic.
- * @param nodes_expanded Number of nodes expanded so far.
+ * @param nodes_expanded (output) Number of nodes expanded so far.
  * @return Vector of all states one k-flip away from the given state.
  */
 NodeVector expand(const Node &node, int gap_x, int &nodes_expanded) {
@@ -130,13 +132,13 @@ NodeVector expand(const Node &node, int gap_x, int &nodes_expanded) {
         for (int k = 1; k < n; ++k) {
             std::vector<int> s_flip = flip(node.s, k);
             // increment g_F (assumes unit cost)
-            successors.emplace_back(s_flip, INT_MAX, -1, h(s_flip, Direction::F, gap_x), -1, Direction::F);
+            successors.emplace_back(s_flip, Direction::F);
         }
     } else if (node.dir == Direction::B) {
         for (int k = 1; k < n; ++k) {
             std::vector<int> s_flip = flip(node.s, k);
             // increment g_B (assumes unit cost)
-            successors.emplace_back(s_flip, -1, INT_MAX, -1, h(s_flip, Direction::B, gap_x), Direction::B);
+            successors.emplace_back(s_flip, Direction::B);
         }
     }
     return successors;

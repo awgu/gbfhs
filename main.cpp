@@ -21,7 +21,9 @@
  * @brief Main function.
  */
 int main() {
-    // std::srand(15780);  // set seed
+    std::srand(15780);  // set seed
+
+    int eps = 1;
 
     int gbfhs_nodes_expanded = 0;
     int mme_nodes_expanded = 0;
@@ -40,19 +42,20 @@ int main() {
             std::vector<int> initial_state = { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 };
             std::random_shuffle(initial_state.begin(), initial_state.end());
             initial_state.push_back(11);  // plate is always last
-            print_vector(initial_state);
+            // print_vector(initial_state);
 
             std::vector<int> goal_state = { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11 };
 
             int nodes_expanded = 0;
-            int gbfhs_opt = gbfhs(initial_state, goal_state, 1, gap_x, nodes_expanded);
+            int gbfhs_opt = gbfhs(initial_state, goal_state, eps, gap_x, nodes_expanded);
+            (void)gbfhs_opt;
             gbfhs_nodes_expanded += nodes_expanded;
             gbfhs_out << nodes_expanded << std::endl;
             std::cout << "GBFHS opt: " << gbfhs_opt << std::endl;
             std::cout << "nodes expanded: " << nodes_expanded << std::endl;
 
             nodes_expanded = 0;
-            int mme_opt = mme(initial_state, goal_state, 1, gap_x, nodes_expanded);
+            int mme_opt = mme(initial_state, goal_state, eps, gap_x, nodes_expanded);
             mme_nodes_expanded += nodes_expanded;
             mme_out << nodes_expanded << std::endl;
             std::cout << "MMe opt: " << mme_opt << std::endl;
@@ -79,7 +82,8 @@ int main() {
 
     // // std::vector<int> initial_state = { 9, 7, 6, 10, 8, 3, 2, 1, 5, 4, 11 };
     // // std::vector<int> initial_state = { 9, 1, 8, 4, 2, 6, 7, 5, 3, 10, 11 };
-    // std::vector<int> initial_state = { 1, 8, 7, 2, 6, 10, 4, 5, 9, 3, 11 };
+    // // std::vector<int> initial_state = { 1, 8, 7, 2, 6, 10, 4, 5, 9, 3, 11 };
+    // std::vector<int> initial_state = { 3, 10, 5, 4, 1, 7, 6, 2, 9, 8, 11 };
     // std::vector<int> goal_state = { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11 };
     // int nodes_expanded = 0;
     // int gap_x = 0;

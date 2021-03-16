@@ -1,6 +1,6 @@
 /**
  * @file mme.cpp
- * @brief MMe implementation for n-pancake problem.
+ * @brief MMe implementation for n-puzzle problem.
  * 
  * @author Andrew Gu (andrewg2)
  * @bug 
@@ -20,15 +20,17 @@
  * @param node Node to get the priority of.
  * @param eps Minimum cost operator on the node.
  * @param dir Direction.
- * @param gap_x x for the GAP-x heuristic.
+ * @param is Initial state.
+ * @param gs Goal state.
+ * @param discount Used for degrading the heuristic.
  * @param g_D Map from nodes to cost in direction dir.
  * @return Priority of the node.
  */
-int pr(const Node &node, int eps, Direction dir, int gap_x, const NodeIntMap &g_D) {
+int pr(const Node &node, int eps, Direction dir, const std::vector<int> &is, const std::vector<int> &gs, int discount, const NodeIntMap &g_D) {
     assert(dir == Direction::F || dir == Direction::B);
     assert(g_D.count(node) > 0);
     int g_D_ = g_D.find(node)->second;
-    int h_D = h(node.s, dir, gap_x);
+    int h_D = (dir == Direction::F) ? h(node.s, gs, discount) : h(node.s, is, discount);
     int f_D = g_D_ + h_D;
     return std::max(f_D, 2 * g_D_ + eps);
 }
@@ -43,14 +45,16 @@ int pr(const Node &node, int eps, Direction dir, int gap_x, const NodeIntMap &g_
  * @param open_D Open set to scan.
  * @param eps Minimum cost operator.
  * @param dir Direction of the open set to scan.
- * @param gap_X x for the GAP-x heuristic.
+ * @param is Initial state.
+ * @param gs Goal state.
+ * @param discount Used for degrading the heuristic.
  * @param prmin_D (output) Minimum priority on open_D.
  * @param fmin_D (output) Minumum f on open_D.
  * @param gmin_D (output) Minimum g on open_D.
  * @param g_D Map from nodes to costs in direction dir.
  * @return Node with pr_D(n) == prmin_D and minimal g_D(n).
  */
-Node scan(const NodeSet &open_D, int eps, Direction dir, int gap_x, int &prmin_D, int &fmin_D, int &gmin_D, const NodeIntMap &g_D) {
+Node scan(const NodeSet &open_D, int eps, Direction dir, const std::vector<int> &is, const std::vector<int> &gs, int discount, int &prmin_D, int &fmin_D, int &gmin_D, const NodeIntMap &g_D) {
     assert(!open_D.empty());
     assert(dir == Direction::F || dir == Direction::B);
 
@@ -63,7 +67,7 @@ Node scan(const NodeSet &open_D, int eps, Direction dir, int gap_x, int &prmin_D
     int g_D_ = INT_MAX;
 
     for (const Node &node : open_D) {
-        int pr_D = pr(node, eps, dir, gap_x, g_D);
+        int pr_D = pr(node, eps, dir, is, gs, discount, g_D);
         assert(g_D.count(node) > 0);
         int g_D_node = g_D.find(node)->second;
 
@@ -81,7 +85,7 @@ Node scan(const NodeSet &open_D, int eps, Direction dir, int gap_x, int &prmin_D
             }
         }
 
-        fmin_D = std::min(fmin_D, g_D_node + h(node.s, dir, gap_x));
+        fmin_D = std::min(fmin_D, g_D_node + h(node.s, (dir == Direction::F) ? gs : is, discount));
         gmin_D = std::min(gmin_D, g_D_node);
     }
 
@@ -96,11 +100,11 @@ Node scan(const NodeSet &open_D, int eps, Direction dir, int gap_x, int &prmin_D
  * @param goal_state Goal state.
  * @param eps Integer representing the minimum-cost operator in the domain,
  * i.e. the cheapest edge in the state space.
- * @param gap_x x for the GAP-x heuristic.
+ * @param discount Used for degrading the heuristic.
  * @param nodes_expanded (output) Number of nodes expanded.
  * @return Optimal cost.
  */
-int mme(const std::vector<int> &initial_state, const std::vector<int> &goal_state, int eps, int gap_x, int &nodes_expanded) {
+int mme(const std::vector<int> &initial_state, const std::vector<int> &goal_state, int eps, int discount, int &nodes_expanded) {
     int U = INT_MAX;  // unsolvable
     nodes_expanded = 0;
 
@@ -118,8 +122,8 @@ int mme(const std::vector<int> &initial_state, const std::vector<int> &goal_stat
     while (!open_F.empty() && !open_B.empty()) {
         int fmin_F, fmin_B, gmin_F, gmin_B, prmin_F, prmin_B;
 
-        Node node_F = scan(open_F, eps, Direction::F, gap_x, prmin_F, fmin_F, gmin_F, g_F);
-        Node node_B = scan(open_B, eps, Direction::B, gap_x, prmin_B, fmin_B, gmin_B, g_B);
+        Node node_F = scan(open_F, eps, Direction::F, initial_state, goal_state, discount, prmin_F, fmin_F, gmin_F, g_F);
+        Node node_B = scan(open_B, eps, Direction::B, initial_state, goal_state, discount, prmin_B, fmin_B, gmin_B, g_B);
         int C = std::min(prmin_F, prmin_B);
         if (U <= std::max(std::max(C, fmin_F), std::max(fmin_B, gmin_F + gmin_B + eps))) {
             return U;
@@ -137,7 +141,7 @@ int mme(const std::vector<int> &initial_state, const std::vector<int> &goal_stat
         closed_D.insert(node);
         
         /* iterate over successor nodes */
-        NodeVector successors = expand(node, gap_x, nodes_expanded);
+        NodeVector successors = expand(node, nodes_expanded);
         for (Node &s_node : successors) {
             /* continue if node visits s_node via a suboptimal path */
             bool already_seen = open_D.count(s_node) > 0 || closed_D.count(s_node) > 0;

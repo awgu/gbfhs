@@ -25,7 +25,7 @@ int main() {
     std::srand(15780);  // set seed
 
     int eps = 1;
-    int discount = 3;
+    int discount = 5;
 
     int gbfhs_nodes_expanded = 0;
     int mme_nodes_expanded = 0;
@@ -33,9 +33,9 @@ int main() {
     std::ofstream gbfhs_out;
     std::ofstream mme_out;
     std::ofstream astar_out;
-    gbfhs_out.open("experiments/gbfhs_8puzzle_50_3.txt", std::ofstream::trunc);
-    mme_out.open("experiments/mme_8puzzle_50_3.txt", std::ofstream::trunc);
-    astar_out.open("experiments/astar_8puzzle_50_3.txt", std::ofstream::trunc);
+    gbfhs_out.open("experiments/gbfhs_8puzzle_50_" + std::to_string(discount) + ".txt", std::ofstream::trunc);
+    mme_out.open("experiments/mme_8puzzle_50_" + std::to_string(discount) + ".txt", std::ofstream::trunc);
+    astar_out.open("experiments/astar_8puzzle_50_" + std::to_string(discount) + ".txt", std::ofstream::trunc);
 
     /* 10-pancake problem */
     gbfhs_nodes_expanded = 0;

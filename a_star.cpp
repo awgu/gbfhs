@@ -61,20 +61,25 @@ typedef std::priority_queue<AStarNode,std::vector<AStarNode>,AStarNodeCompare> P
  * @return Optimal cost.
  */
 int a_star(const std::vector<int> &initial_state, const std::vector<int> &goal_state, int gap_x, int &nodes_expanded) {
-    int cost = 0;
 
+    const int n = initial_state.size() - 1;
+    int cost = 0;
     PQ pq;
     pq.emplace(initial_state, 0, h(initial_state, Direction::F, gap_x));
     while (!pq.empty()) {
+        nodes_expanded++;
         AStarNode node = pq.top();
         pq.pop();
+        cost = node.g;
         if (is_solved(node.s, goal_state)) {
             return cost;
         }
-        
+        for (int i = 1; i < n; i++)
+        {
+            std::vector<int> child_i = flip(node.s,i);
+            pq.emplace(child_i,node.g+1,h(child_i, Direction::F, gap_x));
+        }
         /** TODO: expand node with highest priority */
-
-        cost++;
     }
 
     return cost;

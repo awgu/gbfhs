@@ -8,6 +8,7 @@
 
 #include "gbfhs.h"
 #include "mme.h"
+#include "a_star.h"
 
 #include <random>
 #include <algorithm>
@@ -27,6 +28,8 @@ int main() {
 
     int gbfhs_nodes_expanded = 0;
     int mme_nodes_expanded = 0;
+    int a_star_nodes_expanded = 0;
+
     std::ofstream gbfhs_out;
     std::ofstream mme_out;
     gbfhs_out.open("experiments/gbfhs_gap_50.txt", std::ofstream::trunc);
@@ -67,6 +70,12 @@ int main() {
                 print_vector(initial_state);
                 exit(-1);
             }
+
+            nodes_expanded = 0;
+            int a_star_opt = a_star(initial_state, goal_state, gap_x, nodes_expanded);
+            a_star_nodes_expanded += nodes_expanded;
+            std::cout << "a_star opt: " << a_star_opt << std::endl;
+            std::cout << "nodes expanded: " << nodes_expanded << std::endl;      
             
         }
         std::cout << "GBFHS avg nodes expanded: " << gbfhs_nodes_expanded / NUM_ITERS << std::endl;

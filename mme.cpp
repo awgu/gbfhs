@@ -65,23 +65,24 @@ Node scan(const NodeSet &open_D, int eps, Direction dir, int gap_x, int &prmin_D
     for (const Node &node : open_D) {
         int pr_D = pr(node, eps, dir, gap_x, g_D);
         assert(g_D.count(node) > 0);
+        int g_D_node = g_D.find(node)->second;
 
         /* strictly smaller priority */
         if (pr_D < prmin_D) {
             opt_node = &node;
             prmin_D = pr_D;    
-            g_D_ = g_D.find(node)->second;
+            g_D_ = g_D_node;
         }
         /* equal priority but strictly smaller g_D */
         else if (pr_D == prmin_D) {
             if (g_D.count(node) > 0 && g_D.find(node)->second < g_D_) {
                 opt_node = &node;
-                g_D_ = g_D.find(node)->second;
+                g_D_ = g_D_node;
             }
         }
 
-        fmin_D = std::min(fmin_D, g_D.find(node)->second + h(node.s, dir, gap_x));
-        gmin_D = std::min(gmin_D, g_D.find(node)->second);
+        fmin_D = std::min(fmin_D, g_D_node + h(node.s, dir, gap_x));
+        gmin_D = std::min(gmin_D, g_D_node);
     }
 
     assert(opt_node != nullptr);

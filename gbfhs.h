@@ -8,7 +8,7 @@
 
 #pragma once
 
-#include "pancake.h"
+#include "puzzle.h"
 
 /* exported function prototypes */
 int gbfhs(const std::vector<int> &initial_state, const std::vector<int> &goal_state, int eps, int gap_x, int &nodes_expanded);

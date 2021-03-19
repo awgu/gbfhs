@@ -1,12 +1,11 @@
 /**
  * @file gbfhs.cpp
- * @brief GBFHS implementation for n-pancake problem.
+ * @brief GBFHS implementation for n-puzzle problem.
  * 
  * @author Andrew Gu (andrewg2)
- * @bug The current implementation assumes unit costs.
+ * @bug No known bugs.
  */
 
-/* includes */
 #include "gbfhs.h"
 
 #include <random>
@@ -24,16 +23,18 @@ std::mt19937 gen(rd());
  * 
  * @param node Node to check.
  * @param dir Direction to check.
- * @param gap_x x for the GAP-x heuristic.
+ * @param is Initial state.
+ * @param gs Goal state.
+ * @param discount Used for degrading the heuristic.
  * @param fLim Lower bound on the optimal solution cost.
  * @param gLim_D Upper bound on the g-value of nodes to explore in direction D.
  * @param g_D Map from nodes to costs.
  * @return True if the node is expandable; false otherwise.
  */
-bool is_expandable(const Node &node, Direction dir, int gap_x, int fLim, int gLim_D, const NodeIntMap &g_D) {
+bool is_expandable(const Node &node, Direction dir, const std::vector<int> &is, const std::vector<int> &gs, int discount, int fLim, int gLim_D, const NodeIntMap &g_D) {
     assert(dir == Direction::F || dir == Direction::B);
     int g_D_ = g_D.find(node)->second;
-    int h_D = h(node.s, dir, gap_x);
+    int h_D = (dir == Direction::F) ? h(node.s, gs, discount) : h(node.s, is, discount);
     int f_D = g_D_ + h_D;
     return f_D <= fLim && g_D_ < gLim_D;
 }
@@ -109,7 +110,9 @@ Node pick(const NodeSet &expandable_F, const NodeSet &expandable_B) {
  * backward direction.
  * @param fLim Lower bound on the optimal solution cost.
  * @param best Lowest solution cost so far.
- * @param gap_x x for the GAP-x heuristic.
+ * @param is Initial state.
+ * @param gs Goal state.
+ * @param discount Used for degrading the heuristic.
  * @param nodes_expanded Number of nodes expanded so far.
  * @param open_F Forward open set.
  * @param open_B Backward open set.
@@ -119,18 +122,18 @@ Node pick(const NodeSet &expandable_F, const NodeSet &expandable_B) {
  * @param g_B Map from nodes to backward costs.
  * @return Void.
  */
-void expand_level(int gLim_F, int gLim_B, int fLim, int &best, int gap_x, int &nodes_expanded,
+void expand_level(int gLim_F, int gLim_B, int fLim, int &best, const std::vector<int> &is, const std::vector<int> &gs, int discount, int &nodes_expanded,
     NodeSet &open_F, NodeSet &open_B, NodeSet &closed_F, NodeSet &closed_B, NodeIntMap &g_F, NodeIntMap &g_B) {
     /* construct expandable sets */
     NodeSet expandable_F;  // subset of open_F
     NodeSet expandable_B;  // subset of open_B
     for (const Node &node : open_F) {
-        if (is_expandable(node, Direction::F, gap_x, fLim, gLim_F, g_F)) {
+        if (is_expandable(node, Direction::F, is, gs, discount, fLim, gLim_F, g_F)) {
             expandable_F.emplace(node);
         }
     }
     for (const Node &node : open_B) {
-        if (is_expandable(node, Direction::B, gap_x, fLim, gLim_B, g_B)) {
+        if (is_expandable(node, Direction::B, is, gs, discount, fLim, gLim_B, g_B)) {
             expandable_B.emplace(node);
         }
     }
@@ -156,7 +159,7 @@ void expand_level(int gLim_F, int gLim_B, int fLim, int &best, int gap_x, int &n
         closed_D.insert(node);
 
         /* iterate over successor nodes */
-        NodeVector successors = expand(node, gap_x, nodes_expanded);
+        NodeVector successors = expand(node, nodes_expanded);
         for (Node &s_node : successors) {
             /* continue if node visits s_node via a suboptimal path */
             bool already_seen = open_D.count(s_node) > 0 || closed_D.count(s_node) > 0;
@@ -177,7 +180,7 @@ void expand_level(int gLim_F, int gLim_B, int fLim, int &best, int gap_x, int &n
             }
             g_D[s_node] = g_D[node] + 1;  // assumes unit cost
             open_D.insert(s_node);
-            if (is_expandable(s_node, dir, gap_x, fLim, gLim_D, g_D)) {
+            if (is_expandable(s_node, dir, is, gs, discount, fLim, gLim_D, g_D)) {
                 expandable_D.insert(s_node);
             }
 
@@ -200,11 +203,11 @@ void expand_level(int gLim_F, int gLim_B, int fLim, int &best, int gap_x, int &n
  * @param goal_state Goal state.
  * @param eps Integer representing the minimum-cost operator in the domain,
  * i.e. the cheapest edge in the state space.
- * @param gap_x x for the GAP-x heuristic.
+ * @param discount Used for degrading the heuristic.
  * @param nodes_expanded To be set to the number of nodes expanded.
  * @return Optimal cost.
  */
-int gbfhs(const std::vector<int> &initial_state, const std::vector<int> &goal_state, int eps, int gap_x, int &nodes_expanded) {
+int gbfhs(const std::vector<int> &initial_state, const std::vector<int> &goal_state, int eps, int discount, int &nodes_expanded) {
     if (is_solved(initial_state, goal_state)) {
         return 0;
     }
@@ -222,7 +225,7 @@ int gbfhs(const std::vector<int> &initial_state, const std::vector<int> &goal_st
     g_B.emplace(std::make_pair(Node { goal_state, Direction::B }, 0));    
 
     /* initialize limits */
-    int fLim = std::max(std::max(h(initial_state, Direction::F, gap_x), h(goal_state, Direction::B, gap_x)), eps);
+    int fLim = std::max(std::max(h(initial_state, goal_state, discount), h(goal_state, initial_state, discount)), eps);
     int gLim_F = 0;
     int gLim_B = 0;
 
@@ -233,7 +236,7 @@ int gbfhs(const std::vector<int> &initial_state, const std::vector<int> &goal_st
         }
         int gLSum = fLim - eps + 1;
         split(gLSum, gLim_F, gLim_B);
-        expand_level(gLim_F, gLim_B, fLim, best, gap_x, nodes_expanded, open_F, open_B, closed_F, closed_B, g_F, g_B);
+        expand_level(gLim_F, gLim_B, fLim, best, initial_state, goal_state, discount, nodes_expanded, open_F, open_B, closed_F, closed_B, g_F, g_B);
         if (best == fLim) {
             return best;
         }
